@@ -5,13 +5,29 @@ import time
 import random
 import googletrans
 
+# Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# SECURITY WARNING: keep the secret key used in production secret!
+
 secret_file = os.path.join(BASE_DIR, 'secrets.json')
+
+with open(secret_file) as f:
+    secrets = json.loads(f.read())
+
+def get_secret(setting, secrets=secrets):
+    try:
+        return secrets[setting]
+    except KeyError:
+        error_msg = "Set the {} environment variable".format(setting)
+        raise ImproperlyConfigured(error_msg)
+
+SECRET_KEY = get_secret("OPENAI_KEY")
 
 class GenerateQues:
     
     #발급받은 API 키 인증
-    openai.api_key = "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"
+    openai.api_key = SECRET_KEY
     
     def __init__(self, contents_q, contents_a,
                  num_pairs,
