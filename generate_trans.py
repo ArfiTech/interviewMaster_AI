@@ -4,13 +4,14 @@ import json
 import time
 import random
 import googletrans
+from transformers import AutoTokenizer, AutoModelWithLMHead
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # SECURITY WARNING: keep the secret key used in production secret!
 
-secret_file = os.path.join(BASE_DIR, 'secrets.json')
+secret_file = os.path.join(BASE_DIR, 'interviewMaster_AI/secrets.json')
 
 with open(secret_file) as f:
     secrets = json.loads(f.read())
@@ -47,6 +48,24 @@ class GenerateQues:
         self.presence_penalty = presence_penalty
         self.num_responses = num_responses
     
+    def translate_korean_to_english(self, text):
+        tokenizer = AutoTokenizer.from_pretrained("beomi/kcbert-base")
+        model = AutoModelWithLMHead.from_pretrained("beomi/kcbert-base")
+
+        input_ids = tokenizer.encode(text, truncation=True, padding=True, return_tensors="pt")
+        outputs = model.generate(input_ids=input_ids, max_length=128, num_beams=4, early_stopping=True)
+        translated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        return translated_text
+    
+    def translate_english_to_korean(self, text):
+        tokenizer = AutoTokenizer.from_pretrained("beomi/kcbert-base")
+        model = AutoModelWithLMHead.from_pretrained("beomi/kcbert-base")
+        
+        input_ids = tokenizer.encode(text, truncation=True, padding=True, return_tensors="pt")
+        outputs = model.generate(input_ids=input_ids, max_length=128, num_beams=4, early_stopping=True)
+        translated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        return translated_text
+    
     def parse_statement(self, s):
         ret1 = s.split("\n")
         while len(ret1) != 0 and ret1[0] == '':
@@ -60,6 +79,7 @@ class GenerateQues:
         prompt_template = "Please generate a question in Korean based on the following self-introduction. Don't need an answer:\n\n{self_introduction}"
         output_list = []
         ts = googletrans.Translator()
+        
         # 질문생성 대상이 될 자소서 질문-대답 쌍 랜덤 선택
         selected_pairs = random.sample(range(len(self.contents_q)), self.num_pairs)
         contents_q_pick = [self.contents_q[i] for i in selected_pairs]
@@ -69,13 +89,16 @@ class GenerateQues:
 
         # 각 자기소개 질문, 답변 쌍에 대한 질문 생성
         for i in range(len(contents_q_pick)):
-            # 자기소개 질문과 답변을 하나의 문자열로 만듦
-            q_en = ts.translate(contents_q_pick[i], src='ko', dest='en').text
-            a_en = ts.translate(contents_a_pick[i], src='ko', dest='en').text
+            # 자기소개 질문과 답변 ko -> en, 하나의 문자열로 만듦
+            #q_en = ts.translate(contents_q_pick[i], src='ko', dest='en').text
+            #a_en = ts.translate(contents_a_pick[i], src='ko', dest='en').text
+            q_en = self.translate_korean_to_english(contents_q_pick[i])
+            a_en = self.translate_korean_to_english(contents_a_pick[i])
             self_introduction = q_en + " " + a_en
+            
             # 자기 소개에 따라 질문을 작성
             prompt = prompt_template.format(self_introduction=self_introduction)
-            print(prompt)
+            print("prompt: ", prompt)
             for j in range(self.num_responses):
                 # -*- coding: utf-8 -*-
                 response = openai.Completion.create(

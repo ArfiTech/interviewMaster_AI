@@ -3,7 +3,7 @@ import openai
 import torch
 import transformers
 from transformers import AutoTokenizer, AutoModel
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer, util
 import math
 
 from sklearn.metrics.pairwise import cosine_similarity
@@ -15,7 +15,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # SECURITY WARNING: keep the secret key used in production secret!
 
-secret_file = os.path.join(BASE_DIR, 'secrets.json')
+secret_file = os.path.join(BASE_DIR, 'interviewMaster_AI/secrets.json')
 
 with open(secret_file) as f:
     secrets = json.loads(f.read())
@@ -76,25 +76,6 @@ class ScoreAns:
         return similarity
     
     #
-    def score_question_answer_auto(self, question, answer):
-        tokenizer = AutoTokenizer.from_pretrained('sentence-transformers/bert-base-nli-mean-tokens')
-        model = AutoModel.from_pretrained('sentence-transformers/bert-base-nli-mean-tokens')
-        
-        # initialize dictionary to store tokenized sentences
-        tokens = {'input_ids': [], 'attention_mask': []}
-
-        # encode each sentence and append to dictionary
-        question_tokens = tokenizer.encode_plus(question, max_length=128,
-                                        truncation=True, padding='max_length',
-                                        return_tensors='pt')
-        tokens['input_ids'].append(new_tokens['input_ids'][0])
-        tokens['attention_mask'].append(new_tokens['attention_mask'][0])
-
-        # reformat list of tensors into single tensor
-        tokens['input_ids'] = torch.stack(tokens['input_ids'])
-        tokens['attention_mask'] = torch.stack(tokens['attention_mask'])
-    
-    #
     def score_question_answer(self, question, answer):
         model = transformers.BertForNextSentencePrediction.from_pretrained('bert-base-uncased')
         tokenizer = transformers.BertTokenizer.from_pretrained('bert-base-uncased')
@@ -119,6 +100,49 @@ class ScoreAns:
 
         return similarity
     
+    def score_question_answer_hdn(self, question, answer):
+        # BERT 모델 및 토크나이저 초기화
+        tokenizer = AutoTokenizer.from_pretrained('sentence-transformers/bert-base-nli-mean-tokens')
+        model = AutoModel.from_pretrained('sentence-transformers/bert-base-nli-mean-tokens')
+        
+        # 입력 문장을 토큰화하고 텐서로 변환
+        input_ids = torch.tensor([tokenizer.encode(question, add_special_tokens=True)])
+        answer_ids = torch.tensor([tokenizer.encode(answer, add_special_tokens=True)])
+        
+        # BERT 모델의 hidden states 추출
+        with torch.no_grad():
+            outputs = model(input_ids)
+            question_hidden_states = outputs[0].squeeze(0)  # 첫 번째 문장의 hidden states
+            outputs = model(answer_ids)
+            answer_hidden_states = outputs[0].squeeze(0)  # 첫 번째 문장의 hidden states
+
+        # 벡터 값을 추출하여 코사인 유사도 계산
+        question_vector = torch.mean(question_hidden_states, dim=0).numpy()
+        answer_vector = torch.mean(answer_hidden_states, dim=0).numpy()
+        similarity = cosine_similarity([question_vector], [answer_vector])[0][0]
+
+        return similarity
+    
+    def score_question_answer_k2e(self, question, answer):
+        # 한국어 -> 영어 변환을 위한 tokenizer
+        tokenizer = AutoTokenizer.from_pretrained("beomi/kcbert-base")
+        
+        # 문장 벡터화 모델 (영어)
+        model = SentenceTransformer('bert-base-nli-mean-tokens')
+        
+        # 영어로 변환된 문장을 저장할 리스트
+        english_questions = []
+        english_answers = []
+        
+        # 영어로 변환된 문장을 저장
+        for question_seq in question_sequences:
+            english_question = tokenizer(question_seq, return_tensors='pt')['input_ids']
+            english_questions.append(english_question)
+            
+        for answer_seq in answer_sequences:
+            english_answer = tokenizer(answer_seq, return_tensors='pt')['input_ids']
+            english_answers.append(english_answer)
+    
     def score_answer(self):
         scores = []
         feedbacks = []
@@ -129,7 +153,7 @@ class ScoreAns:
             #prompt_score = prompt_template_score.format(question=self.inter_q[i], answer=self.inter_a[i])
             print("prompt: ", prompt)
             
-            score = self.score_question_answer_st(question=self.inter_q[i], answer=self.inter_a[i])
+            score = self.score_question_answer_hdn(question=self.inter_q[i], answer=self.inter_a[i])
             print(score)
             
             # 피드백 생성
